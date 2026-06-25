@@ -26,7 +26,7 @@
       justify-content: center;
       background: black;
       color: white;
-      font-family: "Quantico", sans-serif;
+      font-family: "Quantico";
       font-size: 1.2rem;
       cursor: pointer;
     }
@@ -148,10 +148,6 @@
 
       const data = window.latestPredictions;
 
-      // NOTE: confirm this path matches the real onData payload —
-      // log data once in the console to verify mask_points actually
-      console.log(JSON.stringify(data, null, 2))
-      // lives at outputs[0].mask_points under the new workflow naming
       const detections = data?.outputs?.[0]?.mask_points || [];
 
       // Clear the offscreen mask buffer each frame
@@ -172,7 +168,7 @@
       });
 
       // Blur the buffer — only the black shapes blur, since the rest is transparent
-      maskBuffer.filter(BLUR, 12); // adjust blur strength here
+      maskBuffer.filter(BLUR, 50); // adjust blur strength here
 
       // Composite the blurred black shapes onto the main canvas, over the video
       image(maskBuffer, 0, 0);
