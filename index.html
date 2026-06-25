@@ -56,8 +56,7 @@
     window.streamReady = false;
 
     async function start() {
-      // Backend proxy — keeps your Roboflow API key off the public page
-      const connector = connectors.withProxyUrl("https://YOUR-BACKEND-URL/api/init-webrtc");
+      const connector = connectors.withProxyUrl("https://backend-nrhq.onrender.com/api/init-webrtc");
 
       const stream = await streams.useCamera({ video: { facingMode: "environment" } });
 
