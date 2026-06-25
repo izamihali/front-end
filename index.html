@@ -26,7 +26,7 @@
       justify-content: center;
       background: black;
       color: white;
-      font-family: "Quantico";
+      font-family: "Quantico", sans-serif;
       font-size: 1.2rem;
       cursor: pointer;
     }
@@ -39,6 +39,8 @@
   <script type="module">
     import { connectors, webrtc, streams } from "https://esm.sh/@roboflow/inference-sdk";
 
+    // Hidden video element that the Roboflow SDK writes the processed stream into.
+    // p5 reads pixels from this element each frame rather than capturing its own camera.
     const hiddenVideo = document.createElement("video");
     hiddenVideo.autoplay = true;
     hiddenVideo.playsInline = true;
@@ -51,6 +53,7 @@
     window.streamReady = false;
 
     async function start() {
+      // Backend proxy — keeps your Roboflow API key off the public page
       const connector = connectors.withProxyUrl("https://backend-nrhq.onrender.com/api/init-webrtc");
 
       const stream = await streams.useCamera({ video: { facingMode: "environment" } });
@@ -61,17 +64,19 @@
         wrtcParams: {
           workspaceName: "qsfdsafewsdfsdfsdfs-workspace",
           workflowId: "custom-workflow",
-          streamOutputNames: ["output_image"],
+          streamOutputNames: ["preview_image"],
           dataOutputNames: [
-            "predictions",
+            "mask_predictions",
             "detector_predictions",
             "expanded_ad_prompt",
             "mask_debug",
-            "foreground_person_mask"
+            "foreground_person_mask",
+            "mask_points",
+            "mask_points_debug"
           ],
           processingTimeout: 3600,
-          requestedPlan: "webrtc-gpu-medium",
-          requestedRegion: "eu",
+          requestedPlan: "webrtc-gpu-medium", // Options: webrtc-gpu-small, webrtc-gpu-medium, webrtc-gpu-large
+          requestedRegion: "eu",              // Options: us, eu, ap
         },
         onData: (data) => {
           window.latestPredictions = data;
@@ -142,6 +147,11 @@
       const scaleY = drawH / vh;
 
       const data = window.latestPredictions;
+
+      // NOTE: confirm this path matches the real onData payload —
+      // log data once in the console to verify mask_points actually
+      console.log(JSON.stringify(data, null, 2))
+      // lives at outputs[0].mask_points under the new workflow naming
       const detections = data?.outputs?.[0]?.mask_points || [];
 
       // Clear the offscreen mask buffer each frame
