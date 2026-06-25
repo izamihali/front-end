@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Live Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
+    #startOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+    }
+    #startOverlay button {
+      padding: 16px 32px;
+      font-size: 1.1rem;
+      border-radius: 8px;
+      border: none;
+      background: white;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="startOverlay">
+    <button id="startBtn">Tap to start camera</button>
+  </div>
+
+  <script type="module">
+    import { connectors, webrtc, streams } from "https://esm.sh/@roboflow/inference-sdk";
+
+    // Hidden video element that the Roboflow SDK writes the processed stream into.
+    // p5 reads pixels from this element each frame rather than capturing its own camera.
+    const hiddenVideo = document.createElement("video");
+    hiddenVideo.autoplay = true;
+    hiddenVideo.playsInline = true;
+    hiddenVideo.muted = true;
+    hiddenVideo.style.display = "none";
+    document.body.appendChild(hiddenVideo);
+
+    window.latestPredictions = null;
+    window.videoEl = hiddenVideo;
+    window.streamReady = false;
+
+    async function start() {
+      // Backend proxy — keeps your Roboflow API key off the public page
+      const connector = connectors.withProxyUrl("https://YOUR-BACKEND-URL/api/init-webrtc");
+
+      const stream = await streams.useCamera({ video: { facingMode: "environment" } });
+
+      const connection = await webrtc.useStream({
+        source: stream,
+        connector,
+        wrtcParams: {
+          workspaceName: "advertisement-sztrg",
+          workflowId: "detect-and-classify",
+          streamOutputNames: ["output_image"],
+          dataOutputNames: [
+            "predictions",
+            "detector_predictions",
+            "expanded_ad_prompt",
+            "mask_debug",
+            "foreground_person_mask"
+          ],
+          processingTimeout: 3600,
+          requestedPlan: "webrtc-gpu-medium", // Options: webrtc-gpu-small, webrtc-gpu-medium, webrtc-gpu-large
+          requestedRegion: "us",              // Options: us, eu, ap
+        },
+        onData: (data) => {
+          window.latestPredictions = data;
+        }
+      });
+
+      hiddenVideo.srcObject = await connection.remoteStream();
+      window.streamReady = true;
+      document.getElementById("startOverlay").style.display = "none";
+
+      // Keep the screen awake for unattended exhibition use, if supported
+      if ("wakeLock" in navigator) {
+        navigator.wakeLock.request("screen").catch(() => {});
+      }
+    }
+
+    document.getElementById("startBtn").addEventListener("click", start);
+  </script>
+
+  <script>
+    // ---------- p5.js sketch ----------
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      noStroke();
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function draw() {
+      background(0);
+
+      if (!window.streamReady || !window.videoEl.videoWidth) return;
+
+      const vid = window.videoEl;
+      const vw = vid.videoWidth;
+      const vh = vid.videoHeight;
+
+      // "Cover" fit: scale video to fill the screen, cropping overflow,
+      // same behaviour as CSS object-fit: cover
+      const canvasRatio = width / height;
+      const videoRatio = vw / vh;
+
+      let drawW, drawH, offsetX, offsetY;
+      if (videoRatio > canvasRatio) {
+        drawH = height;
+        drawW = height * videoRatio;
+        offsetX = (width - drawW) / 2;
+        offsetY = 0;
+      } else {
+        drawW = width;
+        drawH = width / videoRatio;
+        offsetX = 0;
+        offsetY = (height - drawH) / 2;
+      }
+
+      // Draw the raw HTML video element onto the p5 canvas
+      drawingContext.drawImage(vid, offsetX, offsetY, drawW, drawH);
+
+      // Scale factors: native video pixel coords -> canvas display coords
+      const scaleX = drawW / vw;
+      const scaleY = drawH / vh;
+
+      const data = window.latestPredictions;
+      const detections = data?.outputs?.[0]?.mask_points || [];
+
+      detections.forEach(pred => {
+        const col = classColor(pred.class);
+
+        // Draw each polygon mask for this detection
+        pred.polygons.forEach(polygon => {
+          if (!polygon.points || polygon.points.length < 3) return;
+
+          fill(col[0], col[1], col[2], 90);
+          stroke(col[0], col[1], col[2]);
+          strokeWeight(2);
+
+          beginShape();
+          polygon.points.forEach(pt => {
+            vertex(offsetX + pt.x * scaleX, offsetY + pt.y * scaleY);
+          });
+          endShape(CLOSE);
+        });
+
+        // Label near the top-left of the bounding box
+        noStroke();
+        fill(col[0], col[1], col[2]);
+        textSize(16);
+        text(
+          `${pred.class} ${(pred.confidence * 100).toFixed(0)}%`,
+          offsetX + pred.bbox.x1 * scaleX,
+          offsetY + pred.bbox.y1 * scaleY - 6
+        );
+      });
+    }
+
+    function classColor(cls) {
+      const colors = {
+        advertisement: [255, 60, 60],
+        person: [0, 255, 136],
+      };
+      return colors[cls] || [0, 150, 255];
+    }
+  </script>
+
+</body>
+</html>
