@@ -168,7 +168,7 @@
       });
 
       // Blur the buffer — only the black shapes blur, since the rest is transparent
-      maskBuffer.filter(BLUR, 12);
+    
       console.log("buffer pixel sample:", maskBuffer.get(width/2, height/2));
       // Composite the blurred black shapes onto the main canvas, over the video
       image(maskBuffer, 0, 0);
