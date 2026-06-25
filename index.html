@@ -153,7 +153,7 @@
       // Clear the offscreen mask buffer each frame
       maskBuffer.clear();
       maskBuffer.noStroke();
-      maskBuffer.fill(0);
+      maskBuffer.fill(0, 0, 0, 218);
 
       detections.forEach(pred => {
         pred.polygons.forEach(polygon => {
