@@ -39,8 +39,6 @@
   <script type="module">
     import { connectors, webrtc, streams } from "https://esm.sh/@roboflow/inference-sdk";
 
-    // Hidden video element that the Roboflow SDK writes the processed stream into.
-    // p5 reads pixels from this element each frame rather than capturing its own camera.
     const hiddenVideo = document.createElement("video");
     hiddenVideo.autoplay = true;
     hiddenVideo.playsInline = true;
@@ -53,8 +51,7 @@
     window.streamReady = false;
 
     async function start() {
-      // Backend proxy — keeps your Roboflow API key off the public page
-      const connector = connectors.withProxyUrl("https://YOUR-BACKEND-URL/api/init-webrtc");
+      const connector = connectors.withProxyUrl("https://backend-nrhq.onrender.com/api/init-webrtc");
 
       const stream = await streams.useCamera({ video: { facingMode: "environment" } });
 
@@ -73,8 +70,8 @@
             "foreground_person_mask"
           ],
           processingTimeout: 3600,
-          requestedPlan: "webrtc-gpu-medium", // Options: webrtc-gpu-small, webrtc-gpu-medium, webrtc-gpu-large
-          requestedRegion: "us",              // Options: us, eu, ap
+          requestedPlan: "webrtc-gpu-medium",
+          requestedRegion: "eu",
         },
         onData: (data) => {
           window.latestPredictions = data;
