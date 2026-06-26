@@ -36,8 +36,6 @@ html, body {
 <script type="module">
 import { connectors, webrtc, streams } from "https://esm.sh/@roboflow/inference-sdk";
 
-// Hidden video element that the Roboflow SDK writes the processed stream into.
-// p5 reads pixels from this element each frame rather than capturing its own camera.
 const hiddenVideo = document.createElement("video");
 hiddenVideo.autoplay = true;
 hiddenVideo.playsInline = true;
@@ -50,45 +48,50 @@ window.videoEl = hiddenVideo;
 window.streamReady = false;
 
 async function start() {
-  // Backend proxy — keeps your Roboflow API key off the public page
-  const connector = connectors.withProxyUrl("https://backend-nrhq.onrender.com/api/init-webrtc");
+  try {
+    document.getElementById("startOverlay").textContent = "Connecting...";
 
-  const stream = await streams.useCamera({ video: { facingMode: "environment" } });
+    const connector = connectors.withProxyUrl("https://backend-nrhq.onrender.com/api/init-webrtc");
 
-  const connection = await webrtc.useStream({
-    source: stream,
-    connector,
-    wrtcParams: {
-      workspaceName: "qsfdsafewsdfsdfsdfs-workspace",
-      workflowId: "custom-workflow",
-      streamOutputNames: ["preview_image"],
-      dataOutputNames: [
-        "mask_predictions",
-        "detector_predictions",
-        "expanded_ad_prompt",
-        "mask_debug",
-        "foreground_person_mask",
-        "mask_points",
-        "mask_points_debug"
-      ],
-      processingTimeout: 3600,
-      // Try "webrtc-gpu-small" first and compare latency before going back to medium/large.
-      requestedPlan: "webrtc-gpu-small",
-      requestedRegion: "eu", // Options: us, eu, ap
-    },
-    onData: (data) => {
-      window.latestPredictions = data;
+    const stream = await streams.useCamera({ video: { facingMode: "environment" } });
+
+    const connection = await webrtc.useStream({
+      source: stream,
+      connector,
+      wrtcParams: {
+        workspaceName: "qsfdsafewsdfsdfsdfs-workspace",
+        workflowId: "custom-workflow",
+        streamOutputNames: ["preview_image"],
+        dataOutputNames: [
+          "mask_predictions",
+          "detector_predictions",
+          "expanded_ad_prompt",
+          "mask_debug",
+          "foreground_person_mask",
+          "mask_points",
+          "mask_points_debug"
+        ],
+        processingTimeout: 3600,
+        requestedPlan: "webrtc-gpu-medium",
+        requestedRegion: "eu",
+      },
+      onData: (data) => {
+        window.latestPredictions = data;
+      }
+    });
+
+    hiddenVideo.srcObject = await connection.remoteStream();
+    window.streamReady = true;
+
+    document.getElementById("startOverlay").style.display = "none";
+
+    if ("wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").catch(() => {});
     }
-  });
-
-  hiddenVideo.srcObject = await connection.remoteStream();
-  window.streamReady = true;
-
-  document.getElementById("startOverlay").style.display = "none";
-
-  // Keep the screen awake for unattended exhibition use, if supported
-  if ("wakeLock" in navigator) {
-    navigator.wakeLock.request("screen").catch(() => {});
+  } catch (err) {
+    console.error("Failed to start stream:", err);
+    document.getElementById("startOverlay").textContent =
+      "Connection failed — tap to retry. (" + (err?.message || err) + ")";
   }
 }
 
@@ -96,7 +99,6 @@ document.getElementById("startOverlay").addEventListener("click", start);
 </script>
 
 <script>
-// ---------- p5.js sketch ----------
 let maskBuffer;
 
 function setup() {
@@ -119,41 +121,31 @@ function draw() {
   const vw = vid.videoWidth;
   const vh = vid.videoHeight;
 
-  // "Contain" fit: scale video to fit fully within the screen,
-  // letterboxing (black bars) instead of cropping —
-  // same behaviour as CSS object-fit: contain.
-  // This guarantees the whole camera frame is visible on any phone,
-  // regardless of its screen aspect ratio.
   const canvasRatio = width / height;
   const videoRatio = vw / vh;
 
   let drawW, drawH, offsetX, offsetY;
 
   if (videoRatio > canvasRatio) {
-    // video is relatively wider than the screen -> fit to width, bars top/bottom
     drawW = width;
     drawH = width / videoRatio;
     offsetX = 0;
     offsetY = (height - drawH) / 2;
   } else {
-    // video is relatively taller than the screen -> fit to height, bars left/right
     drawH = height;
     drawW = height * videoRatio;
     offsetX = (width - drawW) / 2;
     offsetY = 0;
   }
 
-  // Draw the raw HTML video element onto the p5 canvas
   drawingContext.drawImage(vid, offsetX, offsetY, drawW, drawH);
 
-  // Scale factors: native video pixel coords -> canvas display coords
   const scaleX = drawW / vw;
   const scaleY = drawH / vh;
 
   const data = window.latestPredictions;
   const detections = data?.outputs?.[0]?.mask_points || [];
 
-  // Clear the offscreen mask buffer each frame
   maskBuffer.clear();
   maskBuffer.noStroke();
   maskBuffer.fill(0, 0, 0, 218);
@@ -169,10 +161,6 @@ function draw() {
     });
   });
 
-  // Composite the black mask shapes onto the main canvas, over the video
-  // (Removed the per-frame console.log + maskBuffer.get() debug call that
-  // was here before — reading pixels back every frame is expensive and
-  // was likely the single biggest cause of the lag/low fps.)
   image(maskBuffer, 0, 0);
 }
 </script>
